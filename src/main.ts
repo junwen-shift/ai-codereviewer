@@ -80,7 +80,7 @@ async function analyzeCode(
 
 function createPrompt(file: File, chunk: Chunk, prDetails: PRDetails): string {
   return `Your task is to review pull requests. Instructions:
-- Provide the response in following JSON format:  {"reviews": [{"lineNumber":  <line_number>, "reviewComment": "<review comment>"}]}, without adding any code like \`\`\`json.
+- Provide the response in following JSON format:  {"reviews": [{"lineNumber":  <line_number>, "reviewComment": "<review comment>"}]}.
 - Do not give positive comments or compliments.
 - Provide comments and suggestions ONLY if there is something to improve, otherwise "reviews" should be an empty array.
 - Write the comment in GitHub Markdown format.
@@ -127,7 +127,7 @@ async function getAIResponse(prompt: string): Promise<Array<{
     const response = await openai.chat.completions.create({
       ...queryConfig,
       // return JSON if the model supports it:
-      ...(["gpt-4-1106-preview", "gpt4o"].includes(OPENAI_API_MODEL)
+      ...(["gpt-4-1106-preview", "gpt-4o"].includes(OPENAI_API_MODEL)
         ? { response_format: { type: "json_object" } }
         : {}),
       messages: [
@@ -142,7 +142,7 @@ async function getAIResponse(prompt: string): Promise<Array<{
     return JSON.parse(res).reviews;
   } catch (error) {
     console.error("Error:", error);
-    return null;
+    throw new Error("The response was not valid JSON. Check the model response format.");
   }
 }
 
