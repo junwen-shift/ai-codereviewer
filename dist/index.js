@@ -56,8 +56,8 @@ const openai = new openai_1.default({
     apiKey: OPENAI_API_KEY,
 });
 function getPRDetails() {
-    var _a, _b;
     return __awaiter(this, void 0, void 0, function* () {
+        var _a, _b;
         const { repository, number } = JSON.parse((0, fs_1.readFileSync)(process.env.GITHUB_EVENT_PATH || "", "utf8"));
         const prResponse = yield octokit.pulls.get({
             owner: repository.owner.login,
@@ -107,7 +107,7 @@ function analyzeCode(parsedDiff, prDetails) {
 }
 function createPrompt(file, chunk, prDetails) {
     return `Your task is to review pull requests. Instructions:
-- Provide the response in following JSON format:  {"reviews": [{"lineNumber":  <line_number>, "reviewComment": "<review comment>"}]}
+- Provide the response in following JSON format:  {"reviews": [{"lineNumber":  <line_number>, "reviewComment": "<review comment>"}]}.
 - Do not give positive comments or compliments.
 - Provide comments and suggestions ONLY if there is something to improve, otherwise "reviews" should be an empty array.
 - Write the comment in GitHub Markdown format.
@@ -135,8 +135,8 @@ ${chunk.changes
 `;
 }
 function getAIResponse(prompt) {
-    var _a, _b;
     return __awaiter(this, void 0, void 0, function* () {
+        var _a, _b;
         const queryConfig = {
             model: OPENAI_API_MODEL,
             temperature: 0.2,
@@ -146,7 +146,7 @@ function getAIResponse(prompt) {
             presence_penalty: 0,
         };
         try {
-            const response = yield openai.chat.completions.create(Object.assign(Object.assign(Object.assign({}, queryConfig), (OPENAI_API_MODEL === "gpt-4-1106-preview"
+            const response = yield openai.chat.completions.create(Object.assign(Object.assign(Object.assign({}, queryConfig), (["gpt-4-1106-preview", "gpt-4o"].includes(OPENAI_API_MODEL)
                 ? { response_format: { type: "json_object" } }
                 : {})), { messages: [
                     {
@@ -159,7 +159,7 @@ function getAIResponse(prompt) {
         }
         catch (error) {
             console.error("Error:", error);
-            return null;
+            throw new Error("The response was not valid JSON. Check the model response format.");
         }
     });
 }
@@ -187,8 +187,8 @@ function createReviewComment(owner, repo, pull_number, comments) {
     });
 }
 function main() {
-    var _a;
     return __awaiter(this, void 0, void 0, function* () {
+        var _a;
         const prDetails = yield getPRDetails();
         let diff;
         const eventData = JSON.parse((0, fs_1.readFileSync)((_a = process.env.GITHUB_EVENT_PATH) !== null && _a !== void 0 ? _a : "", "utf8"));
