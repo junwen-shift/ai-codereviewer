@@ -81,6 +81,7 @@ function getDiff(owner, repo, pull_number) {
             pull_number,
             mediaType: { format: "diff" },
         });
+        core.info(`Diff: ${response.data}`);
         // @ts-expect-error - response.data is a string
         return response.data;
     });
@@ -93,6 +94,7 @@ function analyzeCode(parsedDiff, prDetails) {
                 continue; // Ignore deleted files
             for (const chunk of file.chunks) {
                 const prompt = createPrompt(file, chunk, prDetails);
+                core.info(`Prompt: ${prompt}`);
                 const aiResponse = yield getAIResponse(prompt);
                 if (aiResponse) {
                     const newComments = createComment(file, chunk, aiResponse);
@@ -155,6 +157,7 @@ function getAIResponse(prompt) {
                     },
                 ] }));
             const res = ((_b = (_a = response.choices[0].message) === null || _a === void 0 ? void 0 : _a.content) === null || _b === void 0 ? void 0 : _b.trim()) || "{}";
+            core.info(`AI Response: ${res}`);
             return JSON.parse(res).reviews;
         }
         catch (error) {
@@ -208,6 +211,7 @@ function main() {
                 head: newHeadSha,
             });
             diff = String(response.data);
+            core.info(`Diff: ${diff}`);
         }
         else {
             console.log("Unsupported event:", process.env.GITHUB_EVENT_NAME);

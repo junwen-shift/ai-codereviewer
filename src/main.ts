@@ -52,6 +52,7 @@ async function getDiff(
     pull_number,
     mediaType: { format: "diff" },
   });
+  core.info(`Diff: ${response.data}`);
   // @ts-expect-error - response.data is a string
   return response.data;
 }
@@ -66,6 +67,7 @@ async function analyzeCode(
     if (file.to === "/dev/null") continue; // Ignore deleted files
     for (const chunk of file.chunks) {
       const prompt = createPrompt(file, chunk, prDetails);
+      core.info(`Prompt: ${prompt}`);
       const aiResponse = await getAIResponse(prompt);
       if (aiResponse) {
         const newComments = createComment(file, chunk, aiResponse);
@@ -139,6 +141,7 @@ async function getAIResponse(prompt: string): Promise<Array<{
     });
 
     const res = response.choices[0].message?.content?.trim() || "{}";
+    core.info(`AI Response: ${res}`);
     return JSON.parse(res).reviews;
   } catch (error) {
     console.error("Error:", error);
@@ -209,6 +212,7 @@ async function main() {
     });
 
     diff = String(response.data);
+    core.info(`Diff: ${diff}`);
   } else {
     console.log("Unsupported event:", process.env.GITHUB_EVENT_NAME);
     return;
