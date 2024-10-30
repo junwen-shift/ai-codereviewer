@@ -107,6 +107,68 @@ function analyzeCode(parsedDiff, prDetails) {
         return comments;
     });
 }
+function createSummaryPrompt(diff, prDetails, promptOverride // optional prompt override parameter
+) {
+    const defaultPrompt = `You are given a "git diff" change. Your task is to analyze it and return a JSON summary with the following details:
+- "nb_new_files": The number of new files introduced in the change.
+- "nb_updated_files': The number of files that were modified.
+- 'nb_deleted_files': The number of files that were removed.
+- "summary": A brief string summary describing the nature of the changes (e.g., "Added role assignment for app-event-trail-service").
+- "is_approvable": A boolean value that is "true" if the changes appear to be low-risk and can be approved automatically, and "false" if the changes are complex or high-risk and require a manual review.
+
+Only use the code differences for your analysis and do not speculate. Return the response in this JSON format:
+{
+  "nb_new_files": <number>,
+  "nb_updated_files": <number>,
+  "nb_deleted_files": <number>,
+  "summary": "<string>",
+  "is_approvable": <boolean>
+}`;
+    const prompt = promptOverride || defaultPrompt;
+    return `${prompt}
+
+Review the following code diff and take the pull request title and description into account when writing the response.
+Pull request title: ${prDetails.title}
+Pull request description:
+
+---
+${prDetails.description}
+---
+
+Git diff to review:
+\`\`\`
+${diff}
+\`\`\`
+`;
+}
+function getAISummaryResponse(prompt) {
+    return __awaiter(this, void 0, void 0, function* () {
+        var _a, _b;
+        const queryConfig = {
+            model: OPENAI_API_MODEL,
+            temperature: 0.2,
+            max_tokens: 700,
+            top_p: 1,
+            frequency_penalty: 0,
+            presence_penalty: 0,
+        };
+        try {
+            const response = yield openai.chat.completions.create(Object.assign(Object.assign(Object.assign({}, queryConfig), { response_format: { type: "json_object" } }), { messages: [
+                    {
+                        role: "system",
+                        content: prompt,
+                    },
+                ] }));
+            const res = ((_b = (_a = response.choices[0].message) === null || _a === void 0 ? void 0 : _a.content) === null || _b === void 0 ? void 0 : _b.trim()) || "{}";
+            core.info(`AI Response: ${res}`);
+            return JSON.parse(res);
+        }
+        catch (error) {
+            console.error("Error:", error);
+            throw new Error("The response was not valid JSON. Check the model response format.");
+        }
+    });
+}
 function createPrompt(file, chunk, prDetails) {
     return `Your task is to review pull requests. Instructions:
 - Provide the response in following JSON format:  {"reviews": [{"lineNumber":  <line_number>, "reviewComment": "<review comment>"}]}.
@@ -148,9 +210,7 @@ function getAIResponse(prompt) {
             presence_penalty: 0,
         };
         try {
-            const response = yield openai.chat.completions.create(Object.assign(Object.assign(Object.assign({}, queryConfig), (["gpt-4-1106-preview", "gpt-4o"].includes(OPENAI_API_MODEL)
-                ? { response_format: { type: "json_object" } }
-                : {})), { messages: [
+            const response = yield openai.chat.completions.create(Object.assign(Object.assign(Object.assign({}, queryConfig), { response_format: { type: "json_object" } }), { messages: [
                     {
                         role: "system",
                         content: prompt,
@@ -233,6 +293,9 @@ function main() {
         if (comments.length > 0) {
             yield createReviewComment(prDetails.owner, prDetails.repo, prDetails.pull_number, comments);
         }
+        const summary = yield getAISummaryResponse(createSummaryPrompt(diff, prDetails));
+        core.info(`aiSummary: ${JSON.stringify(summary)}`);
+        core.setOutput("aiSummary", JSON.stringify(summary));
     });
 }
 main().catch((error) => {

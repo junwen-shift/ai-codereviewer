@@ -80,6 +80,84 @@ async function analyzeCode(
   return comments;
 }
 
+function createSummaryPrompt(
+  diff: string,
+  prDetails: PRDetails,
+  promptOverride?: string // optional prompt override parameter
+): string {
+  const defaultPrompt = `You are given a "git diff" change. Your task is to analyze it and return a JSON summary with the following details:
+- "nb_new_files": The number of new files introduced in the change.
+- "nb_updated_files': The number of files that were modified.
+- 'nb_deleted_files': The number of files that were removed.
+- "summary": A brief string summary describing the nature of the changes (e.g., "Added role assignment for app-event-trail-service").
+- "is_approvable": A boolean value that is "true" if the changes appear to be low-risk and can be approved automatically, and "false" if the changes are complex or high-risk and require a manual review.
+
+Only use the code differences for your analysis and do not speculate. Return the response in this JSON format:
+{
+  "nb_new_files": <number>,
+  "nb_updated_files": <number>,
+  "nb_deleted_files": <number>,
+  "summary": "<string>",
+  "is_approvable": <boolean>
+}`;
+
+  const prompt = promptOverride || defaultPrompt;
+
+  return `${prompt}
+
+Review the following code diff and take the pull request title and description into account when writing the response.
+Pull request title: ${prDetails.title}
+Pull request description:
+
+---
+${prDetails.description}
+---
+
+Git diff to review:
+\`\`\`
+${diff}
+\`\`\`
+`;
+}
+
+async function getAISummaryResponse(prompt: string): Promise<{
+  nb_new_files: number;
+  nb_updated_files: number;
+  nb_deleted_files: number;
+  summary: string;
+  is_approvable: boolean;
+}> {
+  const queryConfig = {
+    model: OPENAI_API_MODEL,
+    temperature: 0.2,
+    max_tokens: 700,
+    top_p: 1,
+    frequency_penalty: 0,
+    presence_penalty: 0,
+  };
+
+  try {
+    const response = await openai.chat.completions.create({
+      ...queryConfig,
+      // return JSON if the model supports it:
+      ...{ response_format: { type: "json_object" } },
+      messages: [
+        {
+          role: "system",
+          content: prompt,
+        },
+      ],
+    });
+
+    const res = response.choices[0].message?.content?.trim() || "{}";
+    core.info(`AI Response: ${res}`);
+    return JSON.parse(res);
+  } catch (error) {
+    console.error("Error:", error);
+    throw new Error("The response was not valid JSON. Check the model response format.");
+  }
+}
+
 function createPrompt(file: File, chunk: Chunk, prDetails: PRDetails): string {
   return `Your task is to review pull requests. Instructions:
 - Provide the response in following JSON format:  {"reviews": [{"lineNumber":  <line_number>, "reviewComment": "<review comment>"}]}.
@@ -129,9 +207,7 @@ async function getAIResponse(prompt: string): Promise<Array<{
     const response = await openai.chat.completions.create({
       ...queryConfig,
       // return JSON if the model supports it:
-      ...(["gpt-4-1106-preview", "gpt-4o"].includes(OPENAI_API_MODEL)
-        ? { response_format: { type: "json_object" } }
-        : {}),
+      ...{ response_format: { type: "json_object" } },
       messages: [
         {
           role: "system",
@@ -213,6 +289,7 @@ async function main() {
 
     diff = String(response.data);
     core.info(`Diff: ${diff}`);
+    
   } else {
     console.log("Unsupported event:", process.env.GITHUB_EVENT_NAME);
     return;
@@ -245,6 +322,9 @@ async function main() {
       comments
     );
   }
+  const summary = await getAISummaryResponse(createSummaryPrompt(diff, prDetails));
+  core.info(`aiSummary: ${JSON.stringify(summary)}`);
+  core.setOutput("aiSummary", JSON.stringify(summary));
 }
 
 main().catch((error) => {
