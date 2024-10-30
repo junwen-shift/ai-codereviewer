@@ -322,9 +322,22 @@ async function main() {
       comments
     );
   }
-  const summary = await getAISummaryResponse(createSummaryPrompt(diff, prDetails));
+  let totalDiff;
+  if (eventData.action === "opened") {
+    totalDiff = diff;
+  } else if (eventData.action === "synchronize") {
+    totalDiff = await getDiff(
+      prDetails.owner,
+      prDetails.repo,
+      prDetails.pull_number
+    );
+  }
+  totalDiff = totalDiff || "";
+  const summary = await getAISummaryResponse(createSummaryPrompt(totalDiff, prDetails));
   core.info(`aiSummary: ${JSON.stringify(summary)}`);
   core.setOutput("aiSummary", JSON.stringify(summary));
+  const str_is_approvable = summary.is_approvable ? "true" : "false";
+  core.setOutput("is_approvable", str_is_approvable);
 }
 
 main().catch((error) => {

@@ -293,9 +293,19 @@ function main() {
         if (comments.length > 0) {
             yield createReviewComment(prDetails.owner, prDetails.repo, prDetails.pull_number, comments);
         }
-        const summary = yield getAISummaryResponse(createSummaryPrompt(diff, prDetails));
+        let totalDiff;
+        if (eventData.action === "opened") {
+            totalDiff = diff;
+        }
+        else if (eventData.action === "synchronize") {
+            totalDiff = yield getDiff(prDetails.owner, prDetails.repo, prDetails.pull_number);
+        }
+        totalDiff = totalDiff || "";
+        const summary = yield getAISummaryResponse(createSummaryPrompt(totalDiff, prDetails));
         core.info(`aiSummary: ${JSON.stringify(summary)}`);
         core.setOutput("aiSummary", JSON.stringify(summary));
+        const str_is_approvable = summary.is_approvable ? "true" : "false";
+        core.setOutput("is_approvable", str_is_approvable);
     });
 }
 main().catch((error) => {
